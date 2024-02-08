@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Chat-GPT Prompt</title>
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', path='/styles.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h1>Chat-GPT Prompt</h1>
+        <form method="post" action="/question">
+            <div>
+                <label for="input-text">Entrada:</label>
+                <textarea id="input-text" name="input_text" rows="4" cols="50">{{ input_text }}</textarea>
+            </div>
+            <button type="submit">Processar</button>
+        </form>
+
+        <form method="post" action="/answer">
+            <div>
+                <label for="output-text">Saída:</label>
+                <textarea id="sql-text" class="result" name="sql-text" rows="4" cols="50">{{ sql_query }}</textarea>
+                
+            </div>
+        </form>
+    </div>
+</body>
+</html>
