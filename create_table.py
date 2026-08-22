@@ -1,34 +1,96 @@
-"""Este é um script para conectar no banco de dados e copiar uma tabela em formato parquet e salvar localmente."""
+"""
+Utilitário opcional para exportação de dados PostgreSQL
+para o formato Parquet.
 
-import psycopg2
-import duckdb
+Este script não é necessário para executar a aplicação principal.
+Ele demonstra uma forma simples de extrair dados de uma tabela
+PostgreSQL e armazená-los localmente em formato Parquet.
+"""
+
+import os
+from pathlib import Path
+
 import pandas as pd
+import psycopg2
+from dotenv import load_dotenv
+from psycopg2 import sql
 
-# Conectar ao banco de dados PostgreSQL
-DB_URL = "insert your db url where"
-conn = psycopg2.connect(DB_URL)
 
-# Nome da tabela a ser copiada
-tabela_origem = "view_app_contas_receber"
+# ============================================================
+# CONFIGURAÇÕES
+# ============================================================
 
-# Consulta SQL para selecionar os dados da tabela
-consulta_sql = f"SELECT * FROM {tabela_origem}"
+load_dotenv()
 
-# Criar conexão DuckDB
-duckdb_conn = duckdb.connect()
+BASE_DIR = Path(__file__).resolve().parent
+DADOS_DIR = BASE_DIR / "dados"
 
-# Executar a consulta SQL no PostgreSQL
-cursor = conn.cursor()
-cursor.execute(consulta_sql)
+DATABASE_URL = os.getenv("DATABASE_URL")
 
-# Obter os dados do PostgreSQL como um DataFrame do pandas
-dados = pd.DataFrame(cursor.fetchall(), columns=[desc[0] for desc in cursor.description])
+TABELA_ORIGEM = "view_app_contas_receber"
+ARQUIVO_SAIDA = DADOS_DIR / "exportacao_postgres.parquet"
 
-# Salvar os dados como um arquivo .parquet usando o DuckDB
-duckdb_conn.register('tabela_origem', dados)
-duckdb_conn.execute(r"COPY (SELECT * FROM tabela_origem) TO 'C:\Users\Inko\Desktop\IAASSISTANT\view_app_contas_receber.parquet' (FORMAT 'parquet')")
 
-# Fechar as conexões
-cursor.close()
-conn.close()
-duckdb_conn.close()
+# ============================================================
+# EXPORTAÇÃO
+# ============================================================
+
+def exportar_tabela_para_parquet() -> None:
+    """
+    Extrai uma tabela PostgreSQL e salva os dados
+    em formato Parquet.
+    """
+
+    if not DATABASE_URL:
+        raise ValueError(
+            "A variável DATABASE_URL não foi configurada."
+        )
+
+    DADOS_DIR.mkdir(parents=True, exist_ok=True)
+
+    conexao = psycopg2.connect(DATABASE_URL)
+
+    try:
+        cursor = conexao.cursor()
+
+        consulta = sql.SQL(
+            "SELECT * FROM {}"
+        ).format(
+            sql.Identifier(TABELA_ORIGEM)
+        )
+
+        cursor.execute(consulta)
+
+        colunas = [
+            descricao[0]
+            for descricao in cursor.description
+        ]
+
+        dados = cursor.fetchall()
+
+        dataframe = pd.DataFrame(
+            dados,
+            columns=colunas,
+        )
+
+        dataframe.to_parquet(
+            ARQUIVO_SAIDA,
+            index=False,
+        )
+
+        print(
+            f"Exportação concluída: "
+            f"{len(dataframe)} registros salvos em "
+            f"{ARQUIVO_SAIDA}"
+        )
+
+    finally:
+        conexao.close()
+
+
+# ============================================================
+# EXECUÇÃO
+# ============================================================
+
+if __name__ == "__main__":
+    exportar_tabela_para_parquet()

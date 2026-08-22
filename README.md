@@ -233,7 +233,7 @@ Contém a lógica principal do projeto:
 
 ### `create_table.py`
 
-Utilitário para preparação e extração de dados utilizados pela aplicação.
+Utilitário opcional que demonstra a extração de dados de uma fonte PostgreSQL e sua persistência em formato Parquet. A execução da aplicação principal não depende de uma conexão com PostgreSQL.
 
 ### `gerar_dados.py`
 
