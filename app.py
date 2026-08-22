@@ -1,44 +1,84 @@
-import logging
-from fastapi import FastAPI, Request, Form
-from fastapi.templating import Jinja2Templates
+from fastapi import FastAPI, Form, Request
+from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
-from index import askGpt, description_tables
+from fastapi.templating import Jinja2Templates
 
-app = FastAPI()
-templates = Jinja2Templates(directory="templates")
+from index import askGpt
+
+
+app = FastAPI(
+    title="Natural Language to SQL",
+    description="Aplicação para geração de consultas SQL a partir de linguagem natural.",
+)
+
+
+# Arquivos estáticos
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
 
-@app.get("/")
-async def index(request: Request):
-    return templates.TemplateResponse("index.html", {"request": request})
+# Templates HTML
+templates = Jinja2Templates(directory="templates")
 
 
-@app.post("/question")
-async def question(request: Request, input_text: str = Form(default=None)):
-    try:
-        if not input_text:
-            raise ValueError("Por favor, forneça uma entrada válida.")
-
-        sql_query = askGpt(input_text)
-        return templates.TemplateResponse(
-            "index.html",
-            {"request": request, "input_text": input_text,  "sql_query": sql_query},
-        )
-    except Exception as e:
-        error_message = f"Ocorreu um erro: {str(e)}"
-        return templates.TemplateResponse(
-            "index.html",
-            {"request": request, "input_text": input_text, "sql_query": ""},
-        )
-
-@app.post("/answer")
-async def answer(request: Request, input_text: str = Form(default=None)):
-    result, sql_query = askGpt(input_text)
+@app.get("/", response_class=HTMLResponse)
+async def home(request: Request):
+    """
+    Renderiza a página inicial da aplicação.
+    """
     return templates.TemplateResponse(
-        "index.html",
-        {"request": request, "input_text": input_text, "sql_query": sql_query},
+        request=request,
+        name="index.html",
+        context={
+            "input_text": "",
+            "sql_query": "",
+            "error_message": "",
+        },
     )
 
+
+@app.post("/question", response_class=HTMLResponse)
+async def question(
+    request: Request,
+    input_text: str = Form(...),
+):
+    """
+    Recebe uma pergunta em linguagem natural e gera
+    a consulta SQL correspondente.
+    """
+
+    input_text = input_text.strip()
+
+    if not input_text:
+        return templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={
+                "input_text": "",
+                "sql_query": "",
+                "error_message": "Informe uma pergunta antes de gerar a consulta.",
+            },
+        )
+
+    try:
+        sql_query = askGpt(input_text)
+
+        return templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={
+                "input_text": input_text,
+                "sql_query": sql_query,
+                "error_message": "",
+            },
+        )
+
+    except Exception as error:
+        return templates.TemplateResponse(
+            request=request,
+            name="index.html",
+            context={
+                "input_text": input_text,
+                "sql_query": "",
+                "error_message": f"Não foi possível gerar a consulta SQL: {error}",
+            },
+        )
