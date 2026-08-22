@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from index import askGpt
+from index import gerar_sql
 
 
 app = FastAPI(
@@ -60,7 +60,7 @@ async def question(
         )
 
     try:
-        sql_query = askGpt(input_text)
+        sql_query = gerar_sql(input_text)
 
         return templates.TemplateResponse(
             request=request,

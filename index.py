@@ -1,66 +1,194 @@
-import logging
-import openai
-from dotenv import load_dotenv
-import pyarrow.parquet as pq
-import duckdb
 import json
+import os
+import re
+from pathlib import Path
+
+import duckdb
+from dotenv import load_dotenv
+from openai import OpenAI
 
 
-load_dotenv()  
-OPENAI_API_KEY = "insert where"
-openai.api_key = OPENAI_API_KEY
+# ============================================================
+# CONFIGURAÇÕES
+# ============================================================
 
-logging.basicConfig(level=logging.DEBUG)
-logger = logging.getLogger(__name__)
+load_dotenv()
 
-duckdb.sql("CREATE VIEW FATURAMENTO AS SELECT * FROM read_parquet('faturamento.parquet')")
-duckdb.sql("CREATE VIEW ESTOQUE AS SELECT * FROM read_parquet('estoque.parquet')")
-duckdb.sql("CREATE VIEW RECEBER AS SELECT * FROM read_parquet('receber.parquet')")
-duckdb.sql("COPY (SELECT table_name, column_name, data_type FROM information_schema.columns) to 'output.json'")
-my_json = duckdb.sql("SELECT table_name, column_name, data_type FROM information_schema.columns").to_df().to_json(orient='records')
+BASE_DIR = Path(__file__).resolve().parent
+DADOS_DIR = BASE_DIR / "dados"
 
-def description_tables() -> dict:
-    return json.loads(duckdb.sql("SELECT table_name, column_name, data_type FROM information_schema.columns").to_df().to_json(orient='records'))
+MODELO_OPENAI = os.getenv("OPENAI_MODEL", "gpt-5.6-luna")
 
-def interact_with_gpt(question):
-    """Esta função tem como entrada a pergunta que será feita pelo usuário, gera o sql e retorna o select referente a pergunta."""
-    completion = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo",
-        messages=[
-            {
-                "role": "system", 
-                "content":  (
-                    "You are a SQL assistant, you only have to answer with SQL queries, no other text, only SQL."
-                )
-            },
-            {
-                "role": "user", 
-                "content": question, "name": "Prompt"
-            }
-        ]
+ARQUIVOS_DADOS = {
+    "FATURAMENTO": DADOS_DIR / "faturamento.parquet",
+    "ESTOQUE": DADOS_DIR / "estoque.parquet",
+    "RECEBER": DADOS_DIR / "receber.parquet",
+}
+
+
+# ============================================================
+# OPENAI
+# ============================================================
+
+client = OpenAI()
+
+
+# ============================================================
+# DUCKDB
+# ============================================================
+
+def criar_conexao() -> duckdb.DuckDBPyConnection:
+    """
+    Cria uma conexão DuckDB em memória e registra
+    os arquivos Parquet como views.
+    """
+
+    arquivos_ausentes = [
+        caminho.name
+        for caminho in ARQUIVOS_DADOS.values()
+        if not caminho.exists()
+    ]
+
+    if arquivos_ausentes:
+        arquivos = ", ".join(arquivos_ausentes)
+
+        raise FileNotFoundError(
+            f"Arquivos de dados não encontrados: {arquivos}. "
+            "Gere os dados sintéticos antes de executar a aplicação."
+        )
+
+    conexao = duckdb.connect(database=":memory:")
+
+    for nome_view, caminho in ARQUIVOS_DADOS.items():
+        caminho_sql = caminho.as_posix().replace("'", "''")
+
+        conexao.execute(
+            f"""
+            CREATE OR REPLACE VIEW {nome_view} AS
+            SELECT *
+            FROM read_parquet('{caminho_sql}')
+            """
+        )
+
+    return conexao
+
+
+def obter_schema(conexao: duckdb.DuckDBPyConnection) -> list[dict]:
+    """
+    Retorna as tabelas, colunas e tipos de dados
+    disponíveis no DuckDB.
+    """
+
+    consulta = """
+        SELECT
+            table_name,
+            column_name,
+            data_type
+        FROM information_schema.columns
+        WHERE table_schema = 'main'
+        ORDER BY
+            table_name,
+            ordinal_position
+    """
+
+    dataframe = conexao.execute(consulta).df()
+
+    return dataframe.to_dict(orient="records")
+
+
+# ============================================================
+# TRATAMENTO DO SQL
+# ============================================================
+
+def limpar_sql(resposta: str) -> str:
+    """
+    Remove marcações Markdown eventualmente retornadas
+    pelo modelo e valida se a resposta contém uma consulta.
+    """
+
+    sql = resposta.strip()
+
+    sql = re.sub(
+        r"^```(?:sql)?\s*",
+        "",
+        sql,
+        flags=re.IGNORECASE,
     )
-    answer = completion.choices[0].message.content
-    return answer
 
-def execute_sql_query(connection, sql_query):
-    """Esta função executa a consulta sql na tabela"""
-    result = connection.execute(sql_query)
-    result_data = result.fetchall()
-    return result_data
+    sql = re.sub(
+        r"\s*```$",
+        "",
+        sql,
+    )
 
-def askGpt(question):
-    """Esta função recebe a pergunta do usuário e retorna o sql e o resulado da consulta sql na tabela desejada."""
+    sql = sql.strip()
+
+    if not re.match(r"^(SELECT|WITH)\b", sql, re.IGNORECASE):
+        raise ValueError(
+            "O modelo não retornou uma consulta SQL de leitura válida."
+        )
+
+    return sql
+
+
+# ============================================================
+# GERAÇÃO DO SQL
+# ============================================================
+
+def gerar_sql(pergunta: str) -> str:
+    """
+    Recebe uma pergunta em linguagem natural e utiliza
+    o schema dos dados como contexto para gerar uma
+    consulta SQL.
+    """
+
+    if not pergunta or not pergunta.strip():
+        raise ValueError("A pergunta não pode estar vazia.")
+
+    conexao = criar_conexao()
+
     try:
-        promptToGptText = f'Dado um banco de dados com as tabelas, colunas e tipo descritas no json a seguir: '
-        promptToGptText += f'{description_tables()}'
-        question_for_gpt = f"{description_tables()}. The query I need is: {question}. Make the necessary changes to the column data types so that the select always runs without errors."
-        sql_query = interact_with_gpt(question_for_gpt)
+        schema = obter_schema(conexao)
+    finally:
+        conexao.close()
 
-        
-        return  sql_query
-    except duckdb.Error as error:
-        logger.error("Erro ao executar a consulta SQL:", error)
-        return None, str(error)
-    except Exception as error:
-        logger.error("Erro inesperado:", error)
-        return None, "Erro inesperado ao executar a consulta SQL."
+    schema_json = json.dumps(
+        schema,
+        ensure_ascii=False,
+        indent=2,
+    )
+
+    prompt = f"""
+Considere o seguinte schema de dados disponível no DuckDB:
+
+{schema_json}
+
+Pergunta do usuário:
+
+{pergunta.strip()}
+
+Gere uma consulta SQL DuckDB que responda à pergunta.
+Use exclusivamente as tabelas e colunas presentes no schema fornecido.
+"""
+
+    resposta = client.responses.create(
+        model=MODELO_OPENAI,
+        instructions=(
+            "Você é um especialista em SQL e análise de dados. "
+            "Sua tarefa é converter perguntas em linguagem natural "
+            "em consultas SQL compatíveis com DuckDB. "
+            "Responda exclusivamente com a consulta SQL, sem explicações, "
+            "sem Markdown e sem comentários. "
+            "Utilize somente operações de leitura, como SELECT e WITH. "
+            "Nunca gere INSERT, UPDATE, DELETE, DROP, ALTER ou outras "
+            "operações que modifiquem os dados."
+        ),
+        input=prompt,
+    )
+
+    if not resposta.output_text:
+        raise RuntimeError(
+            "O modelo não retornou uma resposta."
+        )
+
+    return limpar_sql(resposta.output_text)
