@@ -177,7 +177,7 @@ O modelo de linguagem interpreta a solicitação e retorna a consulta SQL corres
 
 ## Estrutura do projeto
 
-A estrutura final da versão de portfólio será organizada da seguinte forma:
+A estrutura principal do projeto está organizada da seguinte forma:
 
 ```text
 natural-language-to-sql/
@@ -186,9 +186,6 @@ natural-language-to-sql/
 │   ├── faturamento.parquet
 │   ├── estoque.parquet
 │   └── receber.parquet
-│
-├── docs/
-│   └── demonstracao.png
 │
 ├── static/
 │   └── style.css
@@ -358,7 +355,16 @@ FROM faturamento
 GROUP BY cliente;
 ```
 
-Uma captura da aplicação será adicionada nesta seção após a atualização da interface e dos dados utilizados no projeto.
+## Demonstração
+
+A aplicação foi projetada para receber perguntas em linguagem natural e gerar consultas SQL a partir do schema das fontes de dados disponíveis.
+
+### Exemplo ilustrativo
+
+**Pergunta:**
+
+```text
+Qual cliente possui o maior valor em aberto?
 
 ---
 
