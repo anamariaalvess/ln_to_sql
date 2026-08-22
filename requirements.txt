@@ -1,0 +1,17 @@
+# Aplicação web
+fastapi
+uvicorn[standard]
+jinja2
+python-multipart
+
+# IA Generativa
+openai
+python-dotenv
+
+# Dados
+duckdb
+pandas
+pyarrow
+
+# PostgreSQL
+psycopg2-binary
