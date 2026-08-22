@@ -419,23 +419,6 @@ Neste projeto, o foco está na demonstração do fluxo de geração de SQL a par
 
 ---
 
-## Possíveis evoluções
-
-Algumas melhorias que poderiam ser incorporadas futuramente incluem:
-
-* validação automática das consultas geradas;
-* execução opcional do SQL;
-* apresentação dos resultados em tabelas e gráficos;
-* histórico de perguntas;
-* avaliação da qualidade das consultas;
-* suporte a diferentes bancos de dados;
-* comparação entre diferentes modelos de linguagem;
-* tratamento de schemas maiores e mais complexos.
-
-Essas funcionalidades não fazem parte do escopo atual, que busca manter uma implementação simples e didática do problema de **Natural Language to SQL**.
-
----
-
 ## Objetivo do projeto
 
 Este projeto foi desenvolvido com finalidade de estudo e portfólio, demonstrando a aplicação de **IA Generativa integrada a tecnologias de dados** para transformar perguntas de negócio em consultas estruturadas.
